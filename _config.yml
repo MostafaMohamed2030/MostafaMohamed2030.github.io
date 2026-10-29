@@ -1,0 +1,6 @@
+# S0n1c_404 Blog Starter
+# GitHub Pages static site. No build step required.
+title: "S0n1c_404"
+description: "Security Research · CTF Write-ups · Web Pentesting · Projects"
+url: "https://mostafamohamed2030.github.io"
+baseurl: ""
