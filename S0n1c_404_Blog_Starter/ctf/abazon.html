@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Abazon — Session Puzzling | S0n1c_404</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+<style>
+.article-wrap{max-width:850px;margin:56px auto 90px;width:calc(100% - 40px)}.back{color:var(--green);text-decoration:none;font-size:12px}.article-head{padding:35px 0;border-bottom:1px solid var(--line)}.article-head h1{font-size:clamp(34px,5vw,52px);margin:18px 0}.article-meta{display:flex;gap:10px;flex-wrap:wrap;color:var(--muted);font:10px 'DM Mono',monospace}.article-body{color:#c4d0df;font-size:14px;line-height:1.95}.article-body h2{color:var(--text);font-size:24px;margin-top:42px}.article-body h3{color:var(--text);font-size:18px;margin-top:28px}.article-body a{color:var(--green)}.article-body img{display:block;max-width:100%;height:auto;border:1px solid #2b3b50;border-radius:10px;margin:22px auto}.article-body figcaption,.caption{font-size:11px;color:#8499b2;text-align:center;margin-top:-12px}.article-body code{font-family:'DM Mono',monospace;color:#8be9cb;background:#111d2b;padding:2px 5px;border-radius:4px}.article-body pre{overflow:auto;background:#0b1320;border:1px solid #243449;padding:18px;border-radius:9px}.notice{padding:14px 16px;border-left:3px solid var(--green);background:#10221f;border-radius:0 8px 8px 0;color:#bce7d8}.article-footer{border-top:1px solid var(--line);margin-top:45px;padding-top:25px;color:var(--muted);font-size:12px}@media(max-width:600px){.article-wrap{margin-top:30px}.article-body{font-size:13px}}
+</style>
+</head>
+<body>
+<header class="topbar wrap"><a class="brand" href="../"><span class="brand-mark">S<span>_</span></span><span><strong>S0n1c_404</strong><small>SECURITY RESEARCH</small></span></a><nav class="nav"><a href="../#writeups">Write-ups</a><a href="../#categories">Categories</a><a href="../#about">About</a></nav><a class="lang-btn" href="../">Home</a></header>
+<main class="article-wrap">
+<a class="back" href="../#writeups">← Back to write-ups</a>
+<header class="article-head"><div class="post-meta"><span>FAHEMSEC</span><span>•</span><span>WEB EXPLOITATION</span><span>•</span><span>EASY</span></div><h1>Abazon — Session Puzzling</h1><p style="color:var(--muted)">A black-box investigation into session-state confusion and access-control boundaries.</p><div class="article-meta"><span>AUTHOR: S0N1C_404</span><span>DATE: 2026-10-29</span><span>LANGUAGE: EN</span></div></header>
+<article class="article-body">
+<div class="notice"><strong>Publication-safe edition.</strong> This article presents the investigation narrative and redacted evidence. Sensitive session identifiers and the final flag are intentionally obscured.</div>
+<h2>1. Challenge overview</h2>
+<p>Abazon is a PHP e-commerce-themed web CTF hosted on FahemSec. The challenge description points to <code>admin.php</code> and indicates that brute forcing and fuzzing are unnecessary. I treated this as a hint to investigate application logic and the way session state changes across workflows.</p>
+<h2>2. Reconnaissance and feature mapping</h2>
+<p>I started by opening the home page and manually reviewing the main application features: registration, login, password recovery, customer support, the user dashboard, profile management, and the administrative endpoint.</p>
+<figure><img src="../assets/img/abazon/05-registration-page.png" alt="Registration page captured during reconnaissance"><figcaption>Figure 1 — Registration page identified during application mapping.</figcaption></figure>
+<p>The goal was to establish which pages were public, which required authentication, and which workflows could affect state associated with the current session.</p>
+<h2>3. Establishing normal behavior</h2>
+<p>I created a regular test account and logged in through the intended flow. In Burp Suite, I captured the login request and response, including the redirect to the dashboard and the PHP session cookie.</p>
+<figure><img src="../assets/img/abazon/03-login-session.png" alt="Login request and response in Burp Suite"><figcaption>Figure 2 — Login flow. Session values should be treated as sensitive and redacted before public sharing.</figcaption></figure>
+<p>A session cookie identifies a server-side session; it does not independently prove administrative authorization. Protected endpoints must validate the authenticated identity and its permissions.</p>
+<h2>4. Investigating password recovery</h2>
+<p>Next, I inspected the password-recovery workflow and captured the request and its redirect response. A redirect alone is normal behavior; the important question was how session state was handled across this workflow and other session-aware pages.</p>
+<figure><img src="../assets/img/abazon/02-forgot-password.png" alt="Password recovery request and response"><figcaption>Figure 3 — Password recovery request and intermediate response. Reviewing redirects one at a time helps preserve the request sequence.</figcaption></figure>
+<h2>5. Hypothesis: shared session state</h2>
+<p>I considered whether a value used to track the account involved in password recovery could be reused as the identity of the authenticated user. These are different security concepts and should never be interchangeable.</p>
+<p>Session Puzzling describes a class of flaws in which application workflows reuse session variables in ways that allow one workflow to influence another unexpectedly. The evidence here is consistent with that class of issue; the screenshots alone do not reveal the exact PHP source code.</p>
+<h2>6. Correlating session-aware features</h2>
+<p>I compared the request sequence, cookies, redirects, and rendered content across the login, password-recovery, and support workflows.</p>
+<figure><img src="../assets/img/abazon/04-support-session.png" alt="Customer support request and response"><figcaption>Figure 4 — Support page behavior. This is contextual evidence of session-aware behavior, not independent proof of the root cause.</figcaption></figure>
+<p>The main lesson was that endpoints that appear ordinary in isolation can interact in an unexpected way when they rely on shared session state.</p>
+<h2>7. Impact verification</h2>
+<p>The final administrative response displayed the challenge flag. In this public edition, the flag area is blurred and the exact copy-paste exploit sequence is omitted.</p>
+<figure><img src="../assets/img/abazon/01-admin-flag.png" alt="Administrative console with flag obscured"><figcaption>Figure 5 — Administrative console; the flag is intentionally obscured in this public copy.</figcaption></figure>
+<h2>8. Root cause and remediation</h2>
+<p>The likely trust-boundary failure is that state associated with password recovery can influence security-sensitive behavior elsewhere. Recovery targets, authenticated identities, and authorization decisions should be maintained separately.</p>
+<ul>
+<li>Use separate state for password recovery and authentication.</li>
+<li>Enforce authorization on every protected endpoint, server-side.</li>
+<li>Use unpredictable, expiring, single-use recovery tokens.</li>
+<li>Regenerate session IDs after authentication where appropriate; this does not replace authorization checks.</li>
+<li>Add regression tests to ensure a recovery request cannot change the identity attached to an existing session.</li>
+</ul>
+<h2>9. Lessons learned</h2>
+<ul><li>Map application features before testing individual parameters.</li><li>Track cookies and redirects as part of the evidence.</li><li>Test workflows in sequence, not only one endpoint at a time.</li><li>Separate confirmed observations from hypotheses about internal implementation.</li><li>Redact session identifiers and secrets before publishing screenshots.</li></ul>
+<h2>References</h2>
+<ul>
+<li><a href="https://fahemsec.com/challenges" target="_blank" rel="noopener">FahemSec — Challenges</a></li>
+<li><a href="https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html" target="_blank" rel="noopener">OWASP Session Management Cheat Sheet</a></li>
+<li><a href="https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html" target="_blank" rel="noopener">OWASP Authorization Cheat Sheet</a></li>
+<li><a href="https://www.php.net/manual/en/book.session.php" target="_blank" rel="noopener">PHP Manual — Sessions</a></li>
+</ul>
+<div class="article-footer">Written by <strong>S0n1c_404</strong> · Security Research &amp; Engineering</div>
+</article>
+</main>
+<footer class="wrap footer"><a class="footer-brand" href="../">S0n1c_404</a><span>Independent Security Research · 2026</span><div><a href="https://github.com/MostafaMohamed2030" target="_blank" rel="noopener">GitHub</a><a href="../">Home ↑</a></div></footer>
+</body></html>
